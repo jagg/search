@@ -1,7 +1,7 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 
-module Query 
+module Query
 ( showParsedResult
 , runComplexQParser
 , runSimpleQParser
@@ -14,16 +14,17 @@ module Query
 , Query'(..)
 , QTerm (..)
 )
-where 
+where
 
-import Control.Monad.Free
-import Control.Applicative
-import Data.Attoparsec.Char8
+import           Control.Applicative
+import           Control.Monad.Free
+import           Data.Attoparsec.Char8
 import qualified Data.ByteString.Char8 as B
 
 
 data Query' t next =
     Exp t
+  | Wild t
   | Not next
   | And next next
   | Or  next next
@@ -60,6 +61,9 @@ qOr e1 e2 = Free $ Or e1 e2
 qExp :: a -> Query a
 qExp x = Free (Exp x)
 
+qWild :: a -> Query a
+qWild x = Free (Wild x)
+
 
 qNot :: Query a -> Query a
 qNot x = Free (Not x)
@@ -68,13 +72,15 @@ showQuery :: (Show a) => Query a -> String
 showQuery (Free (And e1 e2)) = "(" ++ showQuery e1 ++ " AND " ++ showQuery e2 ++ ")"
 showQuery (Free (Or e1 e2)) = "(" ++ showQuery e1 ++ " OR " ++ showQuery e2 ++ ")"
 showQuery (Free (Exp x)) = show x
+showQuery (Free (Wild x)) = show x ++ "*"
 showQuery (Free (Not e1)) = "(NOT " ++ showQuery e1 ++ ")"
+showQuery (Pure ()) = ""
 
 
 type Field = B.ByteString
 type Value = B.ByteString
 
-data QTerm = QT Field Value 
+data QTerm = QT Field Value
 
 instance Show QTerm where
     show (QT f v) = "[" ++ B.unpack f ++ ":" ++ B.unpack v ++ "]"
@@ -82,12 +88,13 @@ instance Show QTerm where
 -- Query parser
 
 spaces :: Parser ()
-spaces = skipWhile (== ' ') 
+spaces = skipWhile (== ' ')
 
+
+-- Should we use ANDs instead?
 simpleParser :: Parser (Query QTerm)
-simpleParser = orify <$> many1 parseTerm 
-               where orify = foldl1 qOr 
-
+simpleParser = orify <$> many1 parseTerm
+               where orify = foldl1 qOr
 
 parseQuery :: Parser (Query QTerm)
 parseQuery = try parseAnd <|> try parseOr <|> parseNot <|> parseTerm
@@ -97,9 +104,10 @@ parseTerm = try parseSpecificTerm <|> parseGenericTerm
 
 parseGenericTerm :: Parser (Query QTerm)
 parseGenericTerm = do
-                     spaces
-                     value <- takeWhile1 isNotDelimiter
-                     return $ qExp $ QT "default" value
+                    spaces
+                    value <- takeWhile1 isNotDelimiter
+                    return $ if not (B.elem '*' value) then qExp $ QT "default" value
+                             else qWild $ QT "default" (B.take ((B.length value) - 1) value)
                    where isNotDelimiter x = x `notElem`  " :)("
 
 parseSpecificTerm :: Parser (Query QTerm)
@@ -110,34 +118,35 @@ parseSpecificTerm = do
                       char ':'
                       spaces
                       value <- takeWhile1 isNotDelimiter
-                      return $ qExp $ QT field value
+                      return $ if not (B.elem '*' value) then qExp $ QT field value
+                               else qWild $ QT field (B.take ((B.length value) - 1) value)
                     where isNotDelimiter x = x `notElem` " :)("
 
 parseBlock :: Parser (Query QTerm)
-parseBlock = do  
+parseBlock = do
                char '('
                spaces
                x <- parseQuery
                spaces
-               char ')' 
+               char ')'
                spaces
                return x
- 
+
 parseNot :: Parser (Query QTerm)
 parseNot = do
              string "NOT"
-             skipWhile (== ' ') 
+             skipWhile (== ' ')
              term <- parseBlock <|> parseTerm
-             return $ qNot term 
+             return $ qNot term
 
 
 
 parseAnd :: Parser (Query QTerm)
 parseAnd = do
              term1 <- parseBlock <|> parseTerm
-             skipWhile (== ' ') 
+             skipWhile (== ' ')
              string "AND"
-             skipWhile (== ' ') 
+             skipWhile (== ' ')
              term2 <- parseBlock <|> parseTerm
              return $ qAnd term1 term2
 
@@ -145,23 +154,24 @@ parseAnd = do
 parseOr :: Parser (Query QTerm)
 parseOr = do
              term1 <- parseBlock <|> parseTerm
-             skipWhile (== ' ') 
+             skipWhile (== ' ')
              string "OR"
-             skipWhile (== ' ') 
+             skipWhile (== ' ')
              term2 <- parseBlock <|> parseTerm
              return $ qOr term1 term2
 
 runComplexQParser :: B.ByteString -> Either String (Query QTerm)
-runComplexQParser = parseOnly parseQuery 
+runComplexQParser = parseOnly parseQuery
 
 runSimpleQParser :: B.ByteString -> Either String (Query QTerm)
-runSimpleQParser = parseOnly simpleParser 
+runSimpleQParser = parseOnly simpleParser
 
 type QueryParser = B.ByteString -> Either String (Query QTerm)
 
 showParsedResult :: QueryParser -> B.ByteString -> String
-showParsedResult pf bs = case result of 
+showParsedResult pf bs = case result of
                            Right q  -> showQuery q
                            Left err -> err
                           where result = pf bs
+
 

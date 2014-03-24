@@ -1,5 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Trie
 ( createTrie
@@ -11,21 +11,20 @@ module Trie
 , insert
 , insertWith
 , lookupByPrefix
-, Trie.lookup 
+, Trie.lookup
 , Trie
 ) where
 
-import qualified Data.List as L
-import qualified Data.IntMap.Strict as M
-import qualified Data.Text as T
-import Control.Monad
-import Control.Applicative ((<*>), (<$>))
-import Data.Char
+import           Control.Applicative ((<$>), (<*>))
+import           Control.Monad
+import           Data.Char
+import qualified Data.IntMap.Strict  as M
+import qualified Data.List           as L
+import qualified Data.Text           as T
 
 data Trie a  = Leaf !a
              | Node !(Maybe a) !(M.IntMap (Trie a))
                deriving (Show, Eq)
-
 
 createTrie :: T.Text -> a -> Trie a
 createTrie t v = case T.uncons t of
@@ -39,19 +38,20 @@ union :: Trie a -> Trie a -> Trie a
 union (Leaf x) (Node _ m) = Node (Just x) m
 union (Node _ m) (Leaf x) = Node (Just x) m
 union l@(Leaf _) (Leaf _) = l
-union (Node x m) (Node y m') = Node (mplus x y) (M.unionWith union m m') 
+union (Node x m) (Node y m') = Node (mplus x y) (M.unionWith union m m')
 
 unionWith :: (a -> a -> a) -> Trie a -> Trie a -> Trie a
 unionWith merge (Leaf x) (Node my m) = Node (merge <$> (return x) <*> my) m
 unionWith merge (Node mx m) (Leaf y) = Node (merge <$> mx <*> (return y)) m
 unionWith merge (Leaf x) (Leaf y) = Leaf (merge x y)
-unionWith merge (Node x m) (Node y m') = Node (merge <$> x <*> y) (M.unionWith (unionWith merge) m m')
+unionWith merge (Node x m) (Node y m') = Node (merge <$> x <*> y)
+                                              (M.unionWith (unionWith merge) m m')
 
 intersection :: Trie a -> Trie a -> Trie a
 intersection (Leaf x) (Node _ _) = Leaf x
 intersection (Node _ _) (Leaf x) = Leaf x
 intersection l@(Leaf _) (Leaf _) = l
-intersection (Node x m) (Node y m') = Node (mplus x y) (M.intersectionWith intersection m m') 
+intersection (Node x m) (Node y m') = Node (mplus x y) (M.intersectionWith intersection m m')
 
 
 
@@ -87,7 +87,7 @@ terms prefix t = case t of
 
 
 lookupByPrefix :: T.Text -> Trie a -> Maybe [T.Text]
-lookupByPrefix t trie = fmap (terms t) (subTrie t trie) 
+lookupByPrefix t trie = fmap (terms t) (subTrie t trie)
 
 topValue :: Trie a -> Maybe a
 topValue (Leaf x) = Just x
