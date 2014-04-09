@@ -101,5 +101,8 @@ intersection :: Postings -> Postings -> Postings
 intersection (PS im1) (PS im2) = PS $ IM.intersectionWith unionOL im1 im2
 
 separatedBy :: Int -> Postings -> Postings -> Postings
-separatedBy limit (PS im1) (PS im2) = PS $ IM.intersectionWith (keepAdjacentOL limit) im1 im2
+separatedBy limit (PS im1) (PS im2) = PS $ IM.filter isEmpty
+                                                     (IM.intersectionWith (keepAdjacentOL limit)
+                                                                          im1 im2)
+                                      where isEmpty (OCL os) = not $ null os
 

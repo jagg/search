@@ -64,6 +64,16 @@ runQuery (Free (Wild (QT _ x))) imi = fromMaybe PS.empty (wildcard (toText x) im
 runQuery (Free (Not e1)) imi = runQuery e1 imi
 runQuery (Pure  ()) _ = PS.empty
 
+runProximityQuery :: Int -> Query QTerm -> InMemoryIndex -> PS.Postings
+runProximityQuery n (Free (And e1 e2)) imi = PS.separatedBy n (runProximityQuery n e1 imi)
+                                                              (runProximityQuery n e2 imi)
+runProximityQuery n (Free (Or e1 e2)) imi = PS.union (runProximityQuery n e1 imi)
+                                                     (runProximityQuery n e2 imi)
+runProximityQuery _ (Free (Exp (QT _ x))) imi = fromMaybe PS.empty (Index.lookup (toText x) imi)
+runProximityQuery _ (Free (Wild (QT _ x))) imi = fromMaybe PS.empty (wildcard (toText x) imi)
+runProximityQuery n (Free (Not e1)) imi = runProximityQuery n e1 imi
+runProximityQuery _ (Pure  ()) _ = PS.empty
+
 
 search :: InMemoryIndex -> B.ByteString -> Either String PS.Postings
 search imi bs = runSimpleQParser bs >>= (\q -> return $ runQuery q imi)
@@ -71,6 +81,8 @@ search imi bs = runSimpleQParser bs >>= (\q -> return $ runQuery q imi)
 searchComplex :: InMemoryIndex -> B.ByteString -> Either String PS.Postings
 searchComplex imi bs = runComplexQParser bs >>= (\q -> return $ runQuery q imi)
 
+searchProxim :: Int -> InMemoryIndex -> B.ByteString -> Either String PS.Postings
+searchProxim d imi bs = runSimpleQParser bs >>= (\q -> return $ runProximityQuery d q imi)
 
 toText :: B.ByteString -> T.Text
 toText = decodeUtf8

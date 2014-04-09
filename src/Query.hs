@@ -93,8 +93,8 @@ spaces = skipWhile (== ' ')
 
 -- Should we use ANDs instead?
 simpleParser :: Parser (Query QTerm)
-simpleParser = orify <$> many1 parseTerm
-               where orify = foldl1 qOr
+simpleParser = andify <$> many1 parseTerm
+               where andify = foldl1 qAnd
 
 parseQuery :: Parser (Query QTerm)
 parseQuery = try parseAnd <|> try parseOr <|> parseNot <|> parseTerm
